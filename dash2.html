@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<title>AI Self-Healing Cloud System</title>
+<button onclick="toggleTheme()" id="themeBtn">🌙</button>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+body {
+    font-family: 'Segoe UI', sans-serif;
+    background: linear-gradient(135deg, #1e293b, #0f172a, #020617);
+    color: #e2e8f0;
+    text-align: center;
+}
+
+/* TITLE */
+h1 {
+    color: #a5b4fc;
+    text-shadow: 0 0 10px rgba(165, 180, 252, 0.6);
+}
+
+/* CARDS (GLASS EFFECT) */
+.card {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(12px);
+    padding: 20px;
+    margin: 15px;
+    border-radius: 15px;
+    display: inline-block;
+    width: 260px;
+    border: 1px solid rgba(255,255,255,0.1);
+    transition: 0.3s;
+}
+
+.card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+}
+
+/* STATUS COLORS (SOFT) */
+.healthy {
+    border-left: 5px solid #4ade80;
+}
+
+.warning {
+    border-left: 5px solid #f87171;
+}
+
+/* AI BOX */
+#aiBox {
+    margin:20px auto;
+    width:80%;
+    padding:15px;
+    background: rgba(255,255,255,0.05);
+    border-left: 4px solid #818cf8;
+    border-radius:10px;
+    backdrop-filter: blur(10px);
+}
+
+/* MAP */
+#map {
+    display:flex;
+    justify-content:center;
+    gap:20px;
+}
+
+.node {
+    padding:10px 15px;
+    background: rgba(255,255,255,0.05);
+    border-radius:10px;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+/* TIMELINE */
+#timeline {
+    width:80%;
+    margin:auto;
+    background: rgba(255,255,255,0.05);
+    padding:15px;
+    border-radius:10px;
+}
+
+/* TABLE */
+.table-container {
+    max-height:200px;
+    overflow-y:auto;
+}
+
+table {
+    width:80%;
+    margin:auto;
+    border-collapse:collapse;
+    background: rgba(255,255,255,0.05);
+    border-radius:10px;
+}
+
+th {
+    background: rgba(255,255,255,0.1);
+    color: #a5b4fc;
+}
+
+th, td {
+    padding:10px;
+    border-bottom:1px solid rgba(255,255,255,0.1);
+}
+.chart-container {
+    width: 70%;
+    max-width: 700px;
+    height: 300px;
+    margin: 20px auto;
+}
+.card:hover {
+    backdrop-filter: blur(20px);
+}
+/* Light mode */
+body.light {
+    background: #f1f5f9;
+    color: #0f172a;
+}
+
+/* Button styling */
+#themeBtn {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    padding: 6px 10px;
+    border: none;
+    border-radius: 8px;
+    background: #6366f1;
+    color: white;
+    cursor: pointer;
+}
+
+#liveStatus {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    background: #22c55e;
+    color: black;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: bold;
+    animation: blink 1s infinite;
+}
+
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+@keyframes healFlash {
+    0% { background: rgba(74, 222, 128, 0.2); }
+    50% { background: rgba(74, 222, 128, 0.6); }
+    100% { background: transparent; }
+}
+
+.healed {
+    animation: healFlash 1s ease;
+}
+
+
+</style>
+
+</head>
+
+<body>
+<div id="liveStatus">🟢 LIVE</div>
+<h1>🚀 AI Self-Healing Cloud System</h1>
+<p id="time"></p>
+
+<h2 id="score"></h2>
+<div id="aiBox"></div>
+
+<div id="cards"></div>
+
+<h2>🌐 System Map</h2>
+<div id="map"></div>
+
+<h2>📊 Live Monitoring</h2>
+<div class="chart-container">
+    <canvas id="cpuChart"></canvas>
+</div>
+
+<h2>📜 Timeline</h2>
+<div id="timeline"></div>
+
+<h2>🛠️ Healing History</h2>
+<button onclick="clearHistory()">🧹 Clear</button>
+
+<div class="table-container">
+<table id="historyTable">
+<tr><th>Time</th><th>Server</th><th>Issue</th><th>Status</th></tr>
+</table>
+</div>
+
+<script>
+let selectedServer = null;
+let previousStatus = {};
+let previousMetrics = {};
+let cpuData = [], ramData = [], diskData = [], labels = [];
+let alertPlayed = false;
+
+const ctx = document.getElementById('cpuChart').getContext('2d');
+const chart = new Chart(ctx,{
+    type:'line',
+    data:{
+        labels: labels,
+        datasets: [
+            {
+                label:'CPU %',
+                data: cpuData,
+                borderColor:'#60a5fa',
+                tension:0.3
+            },
+            {
+                label:'RAM %',
+                data: ramData,
+                borderColor:'#4ade80',
+                tension:0.3
+            },
+            {
+                label:'DISK %',
+                data: diskData,
+                borderColor:'#f87171',
+                tension:0.3
+            }
+        ]
+    },
+    options:{
+        responsive:true,
+        maintainAspectRatio: false,
+        plugins:{
+            legend:{labels:{color:'white'}}
+        },
+        scales:{
+            y:{min:0,max:100,ticks:{color:'white'}},
+            x:{ticks:{color:'white'}}
+        }
+    }
+});
+
+async function loadStatus(){
+    const res = await fetch('status.json');
+    const data = await res.json();
+
+    const container=document.getElementById('cards');
+    container.innerHTML='';
+
+    let issues=data.filter(s=>s.anomalies.length>0);
+
+    let message=issues.length>0 ?
+    `⚠️ ${issues[0].server} under stress (${issues[0].anomalies.join(", ")})` :
+    "🟢 All systems stable";
+
+    document.getElementById("aiBox").innerText=message;
+
+    let total=data.length;
+    let healthy=data.filter(s=>s.anomalies.length===0).length;
+    document.getElementById("score").innerText="🧠 Stability: "+Math.round((healthy/total)*100)+"%";
+
+    data.forEach(server=>{
+        let prediction = "Stable";
+
+if (previousMetrics[server.server]) {
+    let prev = previousMetrics[server.server];
+
+    if (server.metrics.CPU - prev.CPU > 10) {
+        prediction = "⚡ CPU rising";
+    }
+    else if (server.metrics.RAM - prev.RAM > 8) {
+        prediction = "⚡ RAM rising";
+    }
+    else if (server.metrics.DISK - prev.DISK > 8) {
+        prediction = "⚡ DISK rising";
+    }
+}
+
+        previousMetrics[server.server] = {
+    CPU: server.metrics.CPU,
+    RAM: server.metrics.RAM,
+    DISK: server.metrics.DISK
+};
+
+        let card=document.createElement('div');
+        let isHealthy=server.anomalies.length===0;
+        card.className='card '+(isHealthy?'healthy':'warning');
+
+        card.innerHTML=`
+        <h3>${server.server}</h3>
+        <p>CPU: ${server.metrics.CPU.toFixed(2)}%</p>
+        <p>RAM: ${server.metrics.RAM.toFixed(2)}%</p>
+        <p>DISK: ${server.metrics.DISK.toFixed(2)}%</p>
+        <p>${isHealthy?"🟢 Healthy":"🔴 Issue"}</p>
+        <p>Prediction: ${prediction}</p>
+        `;
+        let wasUnhealthy = previousStatus[server.server] === false;
+let isNowHealthy =
+    server.metrics.CPU < 80 &&
+    server.metrics.RAM < 90 &&
+    server.metrics.DISK < 90;
+
+if (wasUnhealthy && isNowHealthy) {
+    card.classList.add("healed");
+}
+
+previousStatus[server.server] = isNowHealthy;
+
+        container.appendChild(card);
+    });
+
+    // let avgCPU = data.reduce((s,x)=>s+x.metrics.CPU,0)/data.length;
+    // let avgRAM = data.reduce((s,x)=>s+x.metrics.RAM,0)/data.length;
+    // let avgDISK = data.reduce((s,x)=>s+x.metrics.DISK,0)/data.length;
+    let main = null;
+
+// use selected server if clicked
+if (selectedServer) {
+    main = data.find(s => s.server === selectedServer);
+}
+
+// fallback if nothing selected
+if (!main) {
+    main = data[0];
+}
+let cpu = main.metrics.CPU;
+let ram = main.metrics.RAM;
+let disk = main.metrics.DISK;
+
+    let spikeCPU = false;
+    let spikeRAM = false;
+    let spikeDISK = false;
+
+
+if (cpuData.length > 0) {
+    if (cpu - cpuData[cpuData.length - 1] > 15) spikeCPU = true;
+    if (ram - ramData[ramData.length - 1] > 10) spikeRAM = true;
+    if (disk - diskData[diskData.length - 1] > 10) spikeDISK = true;
+}
+cpuData.push(cpu);
+ramData.push(ram);
+diskData.push(disk);
+
+labels.push(new Date().toLocaleTimeString());
+
+if(cpuData.length > 10){
+    cpuData.shift();
+    ramData.shift();
+    diskData.shift();
+    labels.shift();
+}
+chart.data.datasets[0].borderColor = spikeCPU ? '#facc15' : '#60a5fa'; // CPU
+chart.data.datasets[1].borderColor = spikeRAM ? '#facc15' : '#4ade80'; // RAM
+chart.data.datasets[2].borderColor = spikeDISK ? '#facc15' : '#f87171'; // DISK
+chart.data.datasets[0].borderWidth = spikeCPU ? 4 : 2;
+chart.data.datasets[1].borderWidth = spikeRAM ? 4 : 2;
+chart.data.datasets[2].borderWidth = spikeDISK ? 4 : 2;
+chart.update();
+
+    // let map=document.getElementById("map"); map.innerHTML='';
+    // data.forEach(s=>{
+    //     let n=document.createElement("div");
+    //     n.className="node";
+    //     n.innerText=s.server;
+    //     if(s.anomalies.length>0) n.style.boxShadow="0 0 15px red";
+    //     map.appendChild(n);
+    // });
+    let map = document.getElementById("map"); 
+map.innerHTML = '';
+
+data.forEach(s => {
+    let n = document.createElement("div");
+    n.className = "node";
+    n.innerText = s.server;
+
+    // highlight selected
+    if (selectedServer === s.server) {
+        n.style.border = "2px solid #facc15";
+    }
+
+    // click handler
+    n.onclick = () => {
+        selectedServer = s.server;
+    };
+
+    if (s.anomalies.length > 0) {
+        n.style.boxShadow = "0 0 15px red";
+    }
+
+    map.appendChild(n);
+});
+    let hasIssue=data.some(s=>s.anomalies.length>0);
+    if(hasIssue && !alertPlayed){
+        new Audio("https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3").play();
+        alertPlayed=true;
+    }
+    if(!hasIssue) alertPlayed=false;
+    const live = document.getElementById("liveStatus");
+    if (hasIssue) {
+    live.innerText = "🔴 ALERT";
+    live.style.background = "#ef4444";
+} else {
+    live.innerText = "🟢 LIVE";
+    live.style.background = "#22c55e";
+}
+    
+}
+
+async function loadHistory(){
+    const res=await fetch('healing_history.csv');
+    const text=await res.text();
+
+    const rows=text.split('\n').slice(1).filter(r=>r).slice(-5).reverse();
+
+    const table=document.getElementById('historyTable');
+    table.innerHTML="<tr><th>Time</th><th>Server</th><th>Issue</th><th>Status</th></tr>";
+
+    rows.forEach(r=>{
+        let c=r.split(',');
+        let tr=document.createElement('tr');
+        tr.innerHTML=`<td>${c[0]}</td><td>${c[1]}</td><td>${c[2]}</td><td>${c[9]}</td>`;
+        table.appendChild(tr);
+    });
+}
+
+async function loadTimeline(){
+    const res=await fetch('healing_history.csv');
+    const text=await res.text();
+
+    const rows=text.split('\n').slice(1).filter(r=>r).slice(-5).reverse();
+    const timeline=document.getElementById('timeline');
+    timeline.innerHTML='';
+
+    rows.forEach(r=>{
+        let c=r.split(',');
+        let d=document.createElement('div');
+        d.innerHTML=`⏱ ${c[0]} → ${c[2]} → ${c[9]}`;
+        timeline.appendChild(d);
+    });
+}
+
+function clearHistory(){
+    document.getElementById("historyTable").innerHTML="<tr><th>Time</th><th>Server</th><th>Issue</th><th>Status</th></tr>";
+}
+
+setInterval(()=>{
+    loadStatus();
+    loadHistory();
+    loadTimeline();
+},3000);
+
+setInterval(()=>{
+    document.getElementById("time").innerText=new Date().toLocaleTimeString();
+},1000);
+
+loadStatus();
+loadHistory();
+loadTimeline();
+
+
+
+function toggleTheme() {
+    document.body.classList.toggle("light");
+
+    const btn = document.getElementById("themeBtn");
+    btn.innerText = document.body.classList.contains("light") ? "☀️" : "🌙";
+}
+
+
+</script>
+
+</body>
+</html>

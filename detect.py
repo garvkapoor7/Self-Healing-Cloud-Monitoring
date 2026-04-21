@@ -10,7 +10,7 @@ import os
 
 # Thresholds for anomaly detection
 CPU_THRESHOLD = 80.0  # 80% CPU usage
-RAM_THRESHOLD = 85.0  # 85% RAM usage
+RAM_THRESHOLD = 90.0  # 90% RAM usage
 DISK_THRESHOLD = 90.0  # 90% Disk usage
 
 # Prometheus server details
@@ -245,14 +245,47 @@ def ssh_heal_server(server_info, before_metrics, issue):
             after_metrics = get_server_metrics(f"{ip_address}:9100")
             log_healing_history(ip_address, issue, before_metrics, after_metrics, "Success: Installed and Started")
             print(f"Success: Installed and Started {ip_address}")
+        # else:
+        #     # If node_exporter is installed, restart it
+        #     stdin, stdout, stderr = ssh.exec_command('sudo systemctl restart node_exporter')
+        #     time.sleep(2)  # Wait for metrics to stabilize
+        #     # Get metrics after restart
+        #     after_metrics = get_server_metrics(f"{ip_address}:9100")
+        #     log_healing_history(ip_address, issue, before_metrics, after_metrics, "Success: Restarted")
+        #     print(f"Success: Restarted {ip_address}")
         else:
-            # If node_exporter is installed, restart it
-            stdin, stdout, stderr = ssh.exec_command('sudo systemctl restart node_exporter')
-            time.sleep(2)  # Wait for metrics to stabilize
-            # Get metrics after restart
+            print(f"⚡ Checking issue type on {ip_address}")
+
+            # 🔥 If High CPU → kill stress process
+            if "High CPU" in issue:
+                print(f"🔥 High CPU detected → Killing CPU-intensive processes")
+
+                ssh.exec_command('pkill yes')   # kills my test load
+
+                action_status = "CPU Load Reduced"
+
+            else:
+                # 🔁 fallback (your original logic)
+                print(f"🔁 Restarting node_exporter service")
+
+                ssh.exec_command('sudo systemctl restart node_exporter')
+
+                action_status = "Service Restarted"
+
+            time.sleep(2)  # wait for system to stabilize
+
+            # Get metrics after healing
             after_metrics = get_server_metrics(f"{ip_address}:9100")
-            log_healing_history(ip_address, issue, before_metrics, after_metrics, "Success: Restarted")
-            print(f"Success: Restarted {ip_address}")
+
+            log_healing_history(
+                ip_address,
+                issue,
+                before_metrics,
+                after_metrics,
+                f"Success: {action_status}"
+    )
+
+            print(f"✅ Healing completed on {ip_address}")
         ssh.close()
 
     except Exception as e:
@@ -283,7 +316,7 @@ while True:
                 print(f"\n⚠️ Anomalies detected on {server['ip']}:")
                 for anomaly in anomalies:
                     print(f"- {anomaly}")
-                
+                    
                 # Heal using full server config (PEM auth)
                 print(f"Attempting to heal {server['ip']}...")
                 ssh_heal_server(server, metrics, ', '.join(anomalies))
